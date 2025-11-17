@@ -180,6 +180,22 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
     }
   };
 
+  // Keyboard Event Listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isCorrect || !activeCell) return;
+
+      if (e.key >= '0' && e.key <= '9') {
+        handleInput(e.key);
+      } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        handleDelete();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeCell, isCorrect, inputs, layout, hintCache]); // Depend on inputs/layout so handleInput has fresh state
+
   const askTeacherManual = async () => {
      if (!activeCell) return;
      setIsThinking(true);
