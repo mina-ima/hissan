@@ -424,9 +424,9 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
                         </div>
                      )}
 
-                     {/* Plus sign for carry inputs (Multiply or Add) */}
+                     {/* Plus sign for carry inputs (Multiply or Add) - High Z-Index to stay on top */}
                      {showPlus && (
-                        <div className="absolute left-[2px] top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none z-40">
                            <Plus size={10} strokeWidth={3} />
                         </div>
                      )}

@@ -3,7 +3,9 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { MathOperation, Problem, CellData, ExplanationResponse } from "../types";
 
 const getClient = () => {
-  const apiKey = process.env.API_KEY;
+  // Browser safety check: ensure process is defined before accessing env
+  const apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
+  
   if (!apiKey) {
     console.warn("API Key not found in environment variables.");
     return null;
