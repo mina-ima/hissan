@@ -120,9 +120,9 @@ export const getCheerMessage = async (): Promise<string> => {
   try {
     const response = await client.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: "小学生が算数の問題を解けました。人気YouTuberのようにハイテンションで褒めてください。「神レベル！」「天才すぎて草！」「全米が泣いた！」「ナイスー！」など、ポップで短い言葉を選んでください。（20文字以内）",
+        contents: "小学生が算数の問題を解けました。一言だけで褒めてください。「神！」「天才！」「最高！」など、6文字以内の短い言葉。",
     });
-    return response.text || "やったね！";
+    return response.text?.trim() || "やったね！";
   } catch {
     return "すごい！";
   }

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Problem, CellData, MathOperation, AppMode, ExplanationResponse } from '../types';
-import { Check, ArrowLeft, RefreshCw, Sparkles, Flame, ArrowRight } from 'lucide-react';
+import { Check, ArrowLeft, RefreshCw, Sparkles, Flame, ArrowRight, Plus } from 'lucide-react';
 import * as GeminiService from '../services/geminiService';
 import { generateLayout } from '../utils/hissanLayout';
 import { NumPad } from './NumPad';
@@ -45,6 +45,9 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
     const remaining = allCells.filter(c => {
        if (c.type !== 'input') return false;
        const val = currentInputs[c.key];
+       // For navigation, we look for empty cells or wrong cells, 
+       // BUT we must allow skipping carries if the user wants to.
+       // However, for auto-focusing, standard behavior is to guide them sequentially.
        return val !== c.value; 
     });
 
@@ -194,7 +197,7 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeCell, isCorrect, inputs, layout, hintCache]); // Depend on inputs/layout so handleInput has fresh state
+  }, [activeCell, isCorrect, inputs, layout, hintCache]);
 
   const askTeacherManual = async () => {
      if (!activeCell) return;
@@ -205,7 +208,9 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
   };
 
   const checkAnswer = async () => {
-    if (!activeCell) return;
+    // In practice mode, we can force check. 
+    // For now, logic is auto-check on input.
+    // This button could be used to skip or give up if needed.
   };
 
   const handleCellClick = (cell: CellData) => {
@@ -353,6 +358,10 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
                  // Subtraction Logic
                  const isSub = problem.operation === MathOperation.SUBTRACT;
                  const isTopRow = isSub && cell.row === 1 && cell.type === 'static';
+
+                 // Carry Plus Logic (Multiply or Add)
+                 const isCarryOp = problem.operation === MathOperation.MULTIPLY || problem.operation === MathOperation.ADD;
+                 const showPlus = isCarryOp && cell.isCarry;
                  
                  let displayText = cell.value;
                  let isRedText = false;
@@ -369,11 +378,11 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
                     
                     // If the value has changed from the initial state (either borrowed FROM or borrowed INTO)
                     if (currentVal !== initialVal) {
-                        // Show the original value crossed out
-                        displayText = initialVal.toString();
+                        // For visual clarity in subtraction:
+                        // 1. Keep the original number but strike it out.
                         showDiagonalStrike = true;
                         
-                        // Show the current effective value (e.g. 2 or 15) in the helper badge
+                        // 2. Show the new value as a small helper text between rows.
                         helperValue = currentVal;
                     }
                  }
@@ -392,26 +401,33 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
                      `}
                      onClick={() => handleCellClick(cell)}
                    >
-                     {/* Borrow Arrow Button */}
+                     {/* Borrow Arrow Button - Tiny and on the border */}
                      {showBorrowArrow && !isCorrect && (
                          <button 
                             onClick={(e) => {
                                 e.stopPropagation();
                                 handleBorrow(cell.col);
                             }}
-                            className="absolute -left-[27px] top-1/2 -translate-y-1/2 z-50 bg-orange-100 hover:bg-orange-200 text-orange-600 rounded-full p-1 shadow-md border border-orange-300 animate-pulse active:scale-90 transition-transform"
+                            className="absolute left-0 -translate-x-1/2 top-1/2 -translate-y-1/2 z-50 bg-white hover:bg-orange-50 text-orange-500 rounded-full w-4 h-4 flex items-center justify-center shadow-sm border border-orange-200 active:scale-90 transition-transform"
                             aria-label="繰り下げる"
                          >
-                             <ArrowRight size={16} />
+                             <ArrowRight size={10} strokeWidth={3} />
                          </button>
                      )}
 
-                     {/* Helper Value (Between Rows) */}
+                     {/* Helper Value (Between Rows) - Positioned absolutely relative to the cell */}
                      {helperValue !== null && (
-                        <div className="absolute left-0 right-0 bottom-0 translate-y-1/2 flex justify-center z-40 pointer-events-none">
-                            <span className="text-xs font-bold text-red-500 bg-white px-1.5 py-0.5 rounded-md shadow-sm border border-red-100 leading-none">
+                        <div className="absolute left-0 right-0 -bottom-[14px] flex justify-center z-40 pointer-events-none">
+                            <span className="text-sm font-bold text-red-500 bg-white/90 px-1 py-0.5 rounded-md shadow-sm border border-red-100 leading-none">
                                 {helperValue}
                             </span>
+                        </div>
+                     )}
+
+                     {/* Plus sign for carry inputs (Multiply or Add) */}
+                     {showPlus && (
+                        <div className="absolute left-[2px] top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                           <Plus size={10} strokeWidth={3} />
                         </div>
                      )}
 

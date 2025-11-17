@@ -118,6 +118,7 @@ const generateMultiplyLayout = (n1: number, n2: number): HissanLayout => {
 
   // --- MULTIPLICATION CARRY LOGIC ---
   // Calculate carries for the first partial product (multiplying by ones digit of n2)
+  // These carries appear ABOVE the first number (Row 0)
   const carries: Record<number, string> = {};
   const m1 = parseInt(s2[s2.length - 1]); // Ones digit of multiplier
   let currentCarry = 0;
@@ -128,9 +129,14 @@ const generateMultiplyLayout = (n1: number, n2: number): HissanLayout => {
       currentCarry = Math.floor(prod / 10);
       
       // If there is a carry, it goes to the column LEFT of the current digit
-      if (currentCarry > 0 && i < s1.length - 1) {
-          const targetCol = width - 1 - i - 1;
-          carries[targetCol] = currentCarry.toString();
+      // Relative to the layout width
+      if (currentCarry > 0) {
+          const currentDigitCol = width - 1 - i;
+          const targetCol = currentDigitCol - 1;
+          // Only add carry input if it falls within valid bounds or if we want to show it
+          if (targetCol >= 0) {
+            carries[targetCol] = currentCarry.toString();
+          }
       }
   }
   
@@ -172,7 +178,8 @@ const generateMultiplyLayout = (n1: number, n2: number): HissanLayout => {
           cells.push(createCell(resultRowIndex, width - 1 - i, sRes[sRes.length - 1 - i], 'input'));
       }
       
-      // Assign Orders: Interleave Result -> Carry -> Result -> Carry
+      // Assign Orders: Result -> Next Carry -> Result -> Next Carry
+      // Iterate columns from right to left
       for (let i = 0; i < width; i++) {
           const col = width - 1 - i;
           
@@ -180,14 +187,15 @@ const generateMultiplyLayout = (n1: number, n2: number): HissanLayout => {
           const resCell = cells.find(c => c.row === resultRowIndex && c.col === col);
           if (resCell) resCell.order = inputOrder++;
           
-          // 2. Carry cell generated from this column (appears to the left, col - 1)
+          // 2. Carry cell generated from this column calculation (appears to the left, col - 1)
+          // Check if there is a carry cell at col - 1
           const carryCell = cells.find(c => c.row === 0 && c.col === col - 1);
           if (carryCell) carryCell.order = inputOrder++;
       }
       
       currentRow++;
   } else {
-      // Multi-step
+      // Multi-step multiplication
       const resStr = result.toString();
       
       // Partial products
