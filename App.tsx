@@ -1,9 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { OperationCard } from './components/OperationCard';
 import { GridInput } from './components/GridInput';
 import { Lottery } from './components/Lottery';
+import { SettingsModal } from './components/SettingsModal';
 import { MathOperation, Problem, AppMode } from './types';
-import { ArrowLeft, BookOpen, Dumbbell, Gift, Star, Ticket, TrendingUp } from 'lucide-react';
+import { ArrowLeft, BookOpen, Dumbbell, Gift, Star, Ticket, TrendingUp, Settings } from 'lucide-react';
 
 const STORAGE_KEY = 'hissan_master_save_data_v1';
 
@@ -117,6 +119,7 @@ const App: React.FC = () => {
   
   // UI State
   const [showLottery, setShowLottery] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [showTicketAlert, setShowTicketAlert] = useState(false);
   const [showLevelUpAlert, setShowLevelUpAlert] = useState(false);
   
@@ -256,6 +259,10 @@ const App: React.FC = () => {
           onClose={() => setShowLottery(false)} 
         />
       )}
+
+      {showSettings && (
+        <SettingsModal onClose={() => setShowSettings(false)} />
+      )}
       
       {/* Persistent Header Stats */}
       <div className="fixed top-0 right-0 p-4 z-40 flex gap-2 md:gap-3 flex-wrap justify-end items-center pointer-events-none">
@@ -280,6 +287,14 @@ const App: React.FC = () => {
          >
             <Gift size={18} />
             <span>くじ引き ({tickets})</span>
+         </button>
+
+         <button 
+           onClick={() => setShowSettings(true)}
+           className="pointer-events-auto bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-full p-2 shadow-sm transition-colors"
+           title="設定"
+         >
+            <Settings size={20} />
          </button>
       </div>
 

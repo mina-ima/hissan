@@ -1,18 +1,51 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { MathOperation, Problem, CellData, ExplanationResponse } from "../types";
 
+// 環境変数からキーを取得するヘルパー
+const getEnvApiKey = (): string => {
+  // 1. Vercel/Viteの設定に合わせて VITE_API_KEY を優先的に探す
+  // TypeScriptエラー回避のため any キャストを使用
+  try {
+    const meta = import.meta as any;
+    if (meta && meta.env && meta.env.VITE_API_KEY) {
+      return meta.env.VITE_API_KEY;
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  // 2. process.env も確認 (バックアップ)
+  if (typeof process !== 'undefined' && process.env) {
+    // Vercelなどで自動的に割り当てられる場合
+    if (process.env.VITE_API_KEY) return process.env.VITE_API_KEY;
+    if (process.env.API_KEY) return process.env.API_KEY;
+  }
+  return "";
+}
+
 const getClient = () => {
-  const apiKey = 
-    (typeof process !== 'undefined' && process.env && process.env.API_KEY) ||
-    (typeof process !== 'undefined' && process.env && process.env.VITE_API_KEY) ||
-    (typeof process !== 'undefined' && process.env && process.env.REACT_APP_API_KEY) ||
-    (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_API_KEY);
+  // 1. 開発者が設定した環境変数を最優先する
+  let apiKey = getEnvApiKey();
+
+  // 2. 環境変数がない場合のみ、ブラウザのローカルストレージを見る (開発中のテスト用など)
+  if (!apiKey && typeof window !== 'undefined') {
+    apiKey = localStorage.getItem('gemini_api_key') || "";
+  }
 
   if (!apiKey) {
     return null;
   }
   return new GoogleGenAI({ apiKey });
+};
+
+// 外部からキーの状態を確認するための関数
+export const hasValidKey = (): boolean => {
+  return !!(getEnvApiKey() || (typeof window !== 'undefined' && localStorage.getItem('gemini_api_key')));
+};
+
+// システムキー（環境変数）が使われているか確認
+export const isUsingSystemKey = (): boolean => {
+  return !!getEnvApiKey();
 };
 
 // API制限時やオフライン時に返す、計算種類ごとの定型ヒント
