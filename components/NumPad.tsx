@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Delete } from 'lucide-react';
 
@@ -10,14 +11,17 @@ export const NumPad: React.FC<NumPadProps> = ({ onInput, onDelete }) => {
   const keys = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '0'];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.1)] p-4 pb-8 rounded-t-3xl z-50">
-      <div className="max-w-md mx-auto grid grid-cols-3 gap-3">
+    <div className="bg-white shadow-[0_10px_40px_rgba(0,0,0,0.12)] p-3 rounded-[28px] border border-gray-100 pointer-events-auto">
+      <div className="grid grid-cols-3 gap-2 w-[260px]">
         {keys.map((k) => (
           <button
             key={k}
             className={`
-              h-14 rounded-2xl text-2xl font-bold shadow-sm active:translate-y-1 transition-transform
-              ${k === '0' ? 'col-span-2 bg-blue-50 text-blue-600 border-2 border-blue-100' : 'bg-gray-50 text-gray-700 border-2 border-gray-100'}
+              h-12 rounded-2xl text-2xl font-bold number-font shadow-sm transition-all active:scale-95 active:translate-y-1 touch-manipulation
+              ${k === '0' 
+                ? 'col-span-2 bg-blue-50 text-blue-600 border-b-4 border-blue-100 active:border-b-0' 
+                : 'bg-gray-50 text-gray-700 border-b-4 border-gray-200 active:border-b-0'
+              }
             `}
             onClick={() => onInput(k)}
           >
@@ -25,10 +29,10 @@ export const NumPad: React.FC<NumPadProps> = ({ onInput, onDelete }) => {
           </button>
         ))}
         <button
-          className="h-14 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center border-2 border-red-100 active:translate-y-1 transition-transform shadow-sm"
+          className="h-12 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center border-b-4 border-red-100 active:border-b-0 active:translate-y-1 transition-all shadow-sm active:scale-95"
           onClick={onDelete}
         >
-          <Delete size={28} />
+          <Delete size={24} strokeWidth={2.5} />
         </button>
       </div>
     </div>

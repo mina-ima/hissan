@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Problem, CellData, MathOperation, AppMode, ExplanationResponse } from '../types';
-import { Check, ArrowLeft, RefreshCw, Sparkles, Flame, ArrowRight, Plus } from 'lucide-react';
+import { Check, ArrowLeft, RefreshCw, Sparkles, Flame, ArrowRight, Plus, Lightbulb } from 'lucide-react';
 import * as GeminiService from '../services/geminiService';
 import { generateLayout } from '../utils/hissanLayout';
 import { NumPad } from './NumPad';
@@ -45,9 +45,6 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
     const remaining = allCells.filter(c => {
        if (c.type !== 'input') return false;
        const val = currentInputs[c.key];
-       // For navigation, we look for empty cells or wrong cells, 
-       // BUT we must allow skipping carries if the user wants to.
-       // However, for auto-focusing, standard behavior is to guide them sequentially.
        return val !== c.value; 
     });
 
@@ -103,25 +100,17 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
     setActiveCell(startKey);
   }, [problem]);
 
+  // 【変更点】自動でAPIを呼ばないように変更
+  // activeCellが変わっただけでは、「ヒントボタンを押してね」というローカルメッセージを出す
   useEffect(() => {
     if (mode !== 'learning' || isCorrect || !activeCell) return;
 
     const cached = hintCache[activeCell];
     if (cached) {
         setMessage(cached.guide);
-        setIsThinking(false);
     } else {
-        setIsThinking(true);
-        setMessage("先生が考え中...");
-        fetchHint(activeCell, inputs).then(hint => {
-            setActiveCell(current => {
-                if (current === activeCell) {
-                    setMessage(hint.guide);
-                    setIsThinking(false);
-                }
-                return current;
-            });
-        });
+        // APIを節約するため、最初は汎用的なメッセージを表示
+        setMessage("計算してみよう！わからなかったら「ヒント」ボタンを押してね");
     }
   }, [activeCell, mode, isCorrect, problem, layout]);
 
@@ -134,24 +123,11 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
     const newInputs = { ...inputs, [activeCell]: val };
     setInputs(newInputs);
 
-    // Correct value entered for this cell?
     if (val === targetCell.value) {
-       
-       let isSuccess = false;
-
-       // Generic Success Logic:
-       // Check if all REQUIRED (non-carry) input cells are correct.
-       // This allows users to skip carry inputs (mental math) or fill them in as they please.
-       // For Addition/Multiplication: Carry cells are marked isCarry=true.
-       // For Subtraction/Division: All input cells are essential (isCarry is falsy).
        const requiredCells = layout.cells.filter(c => c.type === 'input' && !c.isCarry);
        const isRequiredComplete = requiredCells.every(c => newInputs[c.key] === c.value);
 
        if (isRequiredComplete) {
-          isSuccess = true;
-       }
-
-       if (isSuccess) {
           setIsCorrect(true);
           setActiveCell(null);
           setMessage("かんぺき！すごい！");
@@ -162,6 +138,7 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
        }
     } else {
        hasMistakeRef.current = true;
+       // 間違えた場合も、APIは自動で呼ばず、ローカルのキャッシュか汎用メッセージを表示
        const cached = hintCache[activeCell];
        if (cached && cached.errorHint) {
            setMessage(cached.errorHint);
@@ -199,9 +176,20 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeCell, isCorrect, inputs, layout, hintCache]);
 
+  // 手動で先生に聞くボタン
   const askTeacherManual = async () => {
      if (!activeCell) return;
+     
+     // キャッシュがあればそれを使う
+     if (hintCache[activeCell]) {
+        setMessage(hintCache[activeCell].guide);
+        return;
+     }
+
      setIsThinking(true);
+     setMessage("先生が考え中...");
+     
+     // ここで初めてAPIを呼ぶ
      const hint = await fetchHint(activeCell, inputs);
      setMessage(hint.guide);
      setIsThinking(false);
@@ -209,8 +197,6 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
 
   const checkAnswer = async () => {
     // In practice mode, we can force check. 
-    // For now, logic is auto-check on input.
-    // This button could be used to skip or give up if needed.
   };
 
   const handleCellClick = (cell: CellData) => {
@@ -222,19 +208,14 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
   // --- Subtraction Interactive Borrowing ---
   const canBorrow = (colIdx: number): boolean => {
       if (problem.operation !== MathOperation.SUBTRACT) return false;
-      // Current effective top value. Must handle undefined during initial render.
       const topVal = topRowValues[colIdx];
       if (topVal === undefined) return false;
 
-      // Bottom value
       const bottomCell = layout.cells.find(c => c.row === 2 && c.col === colIdx && c.type === 'static');
-      // If no bottom value, usually it's 0
       const bottomVal = bottomCell ? parseInt(bottomCell.value) : 0;
       
-      // Borrow needed if Top < Bottom
       if (topVal >= bottomVal) return false;
       
-      // Can only borrow if left neighbor exists and has value > 0
       const leftCol = colIdx - 1;
       const leftVal = topRowValues[leftCol];
       if (leftVal === undefined || leftVal <= 0) return false;
@@ -244,13 +225,9 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
 
   const handleBorrow = (targetCol: number) => {
       const sourceCol = targetCol - 1;
-      
-      // 1. Decrement Source
-      // Use fallback 0 just in case, though UI shouldn't allow click if undefined
       const sourceVal = topRowValues[sourceCol] !== undefined ? topRowValues[sourceCol] : 0;
       const newSourceVal = sourceVal - 1;
       
-      // 2. Increment Target
       const targetVal = topRowValues[targetCol] !== undefined ? topRowValues[targetCol] : 0;
       const newTargetVal = targetVal + 10;
       
@@ -359,7 +336,7 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
                  const isSub = problem.operation === MathOperation.SUBTRACT;
                  const isTopRow = isSub && cell.row === 1 && cell.type === 'static';
 
-                 // Carry Plus Logic (Multiply or Add)
+                 // Carry Plus Logic
                  const isCarryOp = problem.operation === MathOperation.MULTIPLY || problem.operation === MathOperation.ADD;
                  const showPlus = isCarryOp && cell.isCarry;
                  
@@ -372,17 +349,11 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
                  const showBorrowArrow = isSub && isTopRow && canBorrow(cell.col);
 
                  if (isTopRow) {
-                    // Use fallback to initial value if topRowValues is not yet initialized to prevent crash
                     const initialVal = parseInt(cell.value);
                     const currentVal = topRowValues[cell.col] !== undefined ? topRowValues[cell.col] : initialVal;
                     
-                    // If the value has changed from the initial state (either borrowed FROM or borrowed INTO)
                     if (currentVal !== initialVal) {
-                        // For visual clarity in subtraction:
-                        // 1. Keep the original number but strike it out.
                         showDiagonalStrike = true;
-                        
-                        // 2. Show the new value as a small helper text between rows.
                         helperValue = currentVal;
                     }
                  }
@@ -401,7 +372,7 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
                      `}
                      onClick={() => handleCellClick(cell)}
                    >
-                     {/* Borrow Arrow Button - Tiny and on the border */}
+                     {/* Borrow Arrow Button */}
                      {showBorrowArrow && !isCorrect && (
                          <button 
                             onClick={(e) => {
@@ -415,7 +386,7 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
                          </button>
                      )}
 
-                     {/* Helper Value (Between Rows) - Positioned absolutely relative to the cell */}
+                     {/* Helper Value */}
                      {helperValue !== null && (
                         <div className="absolute left-0 right-0 -bottom-[14px] flex justify-center z-40 pointer-events-none">
                             <span className="text-sm font-bold text-red-500 bg-white/90 px-1 py-0.5 rounded-md shadow-sm border border-red-100 leading-none">
@@ -424,7 +395,7 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
                         </div>
                      )}
 
-                     {/* Plus sign for carry inputs (Multiply or Add) - High Z-Index to stay on top */}
+                     {/* Plus sign */}
                      {showPlus && (
                         <div className="absolute left-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none z-40">
                            <Plus size={10} strokeWidth={3} />
@@ -476,21 +447,39 @@ export const GridInput: React.FC<GridInputProps> = ({ problem, mode, currentStre
 
       {/* Controls */}
       {!isCorrect ? (
-        <>
-           <div className="fixed bottom-[240px] right-4 z-30">
+        <div className="fixed bottom-6 left-0 right-0 z-50 flex items-stretch justify-center gap-3 pointer-events-none px-2">
+           {/* Action Buttons (Left side column) */}
+           <div className="flex flex-col justify-between pointer-events-auto pb-1 w-[72px] flex-shrink-0">
              {mode === 'learning' && (
-               <button onClick={askTeacherManual} disabled={isThinking} className="bg-white p-3 rounded-full shadow-lg text-blue-500 hover:bg-blue-50 transition-colors border border-blue-100 mb-3 block">
-                 <span className="text-2xl">💡</span>
+               <button 
+                  onClick={askTeacherManual} 
+                  disabled={isThinking} 
+                  className="bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-bold w-[72px] h-[72px] rounded-2xl shadow-lg transition-all border-b-4 border-yellow-600 active:border-b-0 active:translate-y-1 flex flex-col items-center justify-center gap-1 mb-auto"
+               >
+                 <Lightbulb size={24} strokeWidth={2.5} />
+                 <span className="text-xs font-bold">ヒント</span>
                </button>
              )}
              {mode === 'practice' && (
-                 <button onClick={checkAnswer} className="bg-blue-500 p-4 rounded-full shadow-lg text-white hover:bg-blue-600 transition-colors">
+                 <button 
+                   onClick={checkAnswer} 
+                   className="bg-blue-500 hover:bg-blue-600 text-white font-bold w-[72px] h-[72px] rounded-2xl shadow-lg transition-all border-b-4 border-blue-700 active:border-b-0 active:translate-y-1 flex flex-col items-center justify-center gap-1 mt-auto"
+                 >
                     <Check size={24} strokeWidth={3} />
+                    <span className="text-xs font-bold">判定</span>
                  </button>
              )}
            </div>
-          <NumPad onInput={handleInput} onDelete={handleDelete} />
-        </>
+          
+           {/* Center NumPad */}
+           <div className="pointer-events-auto flex-shrink-0">
+              <NumPad onInput={handleInput} onDelete={handleDelete} />
+           </div>
+
+           {/* Right Spacer (To balance the left buttons and keep NumPad centered) */}
+           {/* Hidden on very small screens where space is tight */}
+           <div className="w-[72px] flex-shrink-0 hidden min-[450px]:block"></div>
+        </div>
       ) : (
         <div className="fixed bottom-8 left-0 right-0 flex justify-center z-50 px-6 pointer-events-auto">
              <button 

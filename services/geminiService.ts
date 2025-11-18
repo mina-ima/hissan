@@ -3,14 +3,32 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { MathOperation, Problem, CellData, ExplanationResponse } from "../types";
 
 const getClient = () => {
-  // Browser safety check: ensure process is defined before accessing env
-  const apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
-  
+  const apiKey = 
+    (typeof process !== 'undefined' && process.env && process.env.API_KEY) ||
+    (typeof process !== 'undefined' && process.env && process.env.VITE_API_KEY) ||
+    (typeof process !== 'undefined' && process.env && process.env.REACT_APP_API_KEY) ||
+    (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_API_KEY);
+
   if (!apiKey) {
-    console.warn("API Key not found in environment variables.");
     return null;
   }
   return new GoogleGenAI({ apiKey });
+};
+
+// API制限時やオフライン時に返す、計算種類ごとの定型ヒント
+const getFallbackExplanation = (op: MathOperation): ExplanationResponse => {
+  switch (op) {
+    case MathOperation.ADD:
+      return { guide: "位をそろえて、足し算しよう！", errorHint: "繰り上がりを忘れてないかな？" };
+    case MathOperation.SUBTRACT:
+      return { guide: "上の数から下の数を引こう！", errorHint: "引けない時は隣から借りてこよう！" };
+    case MathOperation.MULTIPLY:
+      return { guide: "九九を使って計算しよう！", errorHint: "九九を思い出して！繰り上がりも足そう。" };
+    case MathOperation.DIVIDE:
+      return { guide: "たてる・かける・ひく・おろす！", errorHint: "あまりが割る数より大きくないかな？" };
+    default:
+      return { guide: "さあ、計算してみよう！", errorHint: "あれ？もういちど計算してみよう！" };
+  }
 };
 
 export const getMathExplanation = async (
@@ -20,20 +38,18 @@ export const getMathExplanation = async (
   targetCellKey?: string
 ): Promise<ExplanationResponse> => {
   const client = getClient();
-  // Default fallback
-  const fallback: ExplanationResponse = { 
-    guide: "さあ、つぎの計算だよ！", 
-    errorHint: "あれ？もういちど計算してみよう！" 
-  };
+  const fallback = getFallbackExplanation(problem.operation);
 
-  if (!client) return { ...fallback, guide: "APIキーが設定されていません。" };
+  if (!client) {
+      // キーがない場合でもエラーにせず、定型文を返す
+      return fallback;
+  }
 
   const opSymbol = 
     problem.operation === MathOperation.ADD ? '+' :
     problem.operation === MathOperation.SUBTRACT ? '-' :
     problem.operation === MathOperation.MULTIPLY ? '×' : '÷';
 
-  // Construct a text representation of the grid for the AI
   let gridArt = "";
   const maxRow = Math.max(...cells.map(c => c.row));
   const maxCol = Math.max(...cells.map(c => c.col));
@@ -45,7 +61,6 @@ export const getMathExplanation = async (
       if (!cell) {
         rowStr += "[ ]";
       } else {
-        // If this is the specific target cell we want advice for, mark it clearly
         if (targetCellKey && cell.key === targetCellKey) {
             rowStr += `[TARGET]`; 
         } else {
@@ -62,27 +77,20 @@ export const getMathExplanation = async (
   }
 
   const prompt = `
-    あなたは登録者数100万人の大人気教育系YouTuber「AI先生」です。
-    小学生の視聴者に向けて、算数の筆算をハイテンションで実況解説してください。
+    あなたは小学生に人気のYouTuber「AI先生」です。
+    算数の筆算を実況解説してください。
     
-    【キャラ設定】
-    - ポップで親しみやすいお兄さん/お姉さんキャラ。
-    - 「さあ、やっていくよ！」「ここは超重要ポイントだ！」など、動画配信のようなリズム感のある口調。
-    - 絵文字（✨、🔥、👍など）を適度に使って画面を賑やかにする。
-    - 難しい言葉は使わない。
-
     【状況】
     問題: ${problem.num1} ${opSymbol} ${problem.num2}
-    現在の筆算の状態:
+    筆算の状態:
     ${gridArt}
     
-    [TARGET] と書かれているマスについて、生徒にアドバイスをします。
+    [TARGET] のマスについてアドバイスをお願いします。
     
-    【出力フォーマット】
-    以下のJSON形式で返してください。Markdownのコードブロックは不要です。
+    【出力】JSON形式
     {
-      "guide": "入力前の解説。答えそのものは言わず、「7 + 6 はいくつかな？」のように、視聴者に問いかけるスタイル。テンション高く！（60文字以内）",
-      "errorHint": "間違えた時のリアクション。「おっと！繰り上がりを忘れてないかい？」「惜しい！もう一度チェックだ！」のように、励ましつつヒントを出す。（40文字以内）"
+      "guide": "入力前のヒント。答えは言わず、考え方を短く楽しく。（40文字以内）",
+      "errorHint": "間違えた時のヒント。励ます感じで。（30文字以内）"
     }
   `;
 
@@ -110,22 +118,21 @@ export const getMathExplanation = async (
     return result;
 
   } catch (error) {
-    console.error("Gemini API Error:", error);
+    console.error("Gemini API Error (falling back to local):", error);
+    // API制限(429)やネットワークエラーの時は定型文を返す
     return fallback;
   }
 };
 
-export const getCheerMessage = async (): Promise<string> => {
-  const client = getClient();
-  if (!client) return "すごい！";
+// API節約のため、褒め言葉はローカルでランダム生成する
+const CHEER_WORDS = [
+  "すごい！", "天才！", "その調子！", "かっこいい！", "神ってる！", 
+  "パーフェクト！", "お見事！", "ナイス！", "最高！", "もってるね！",
+  "やるじゃん！", "さすが！", "レベル高い！", "きまってる！"
+];
 
-  try {
-    const response = await client.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: "小学生が算数の問題を解けました。一言だけで褒めてください。「神！」「天才！」「最高！」など、6文字以内の短い言葉。",
-    });
-    return response.text?.trim() || "やったね！";
-  } catch {
-    return "すごい！";
-  }
+export const getCheerMessage = async (): Promise<string> => {
+  // 非同期I/Fを維持しつつ、即座に返す
+  const randomWord = CHEER_WORDS[Math.floor(Math.random() * CHEER_WORDS.length)];
+  return Promise.resolve(randomWord);
 };

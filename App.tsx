@@ -1,10 +1,11 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { OperationCard } from './components/OperationCard';
 import { GridInput } from './components/GridInput';
 import { Lottery } from './components/Lottery';
 import { MathOperation, Problem, AppMode } from './types';
 import { ArrowLeft, BookOpen, Dumbbell, Gift, Star, Ticket, TrendingUp } from 'lucide-react';
+
+const STORAGE_KEY = 'hissan_master_save_data_v1';
 
 const generateProblem = (op: MathOperation, mode: AppMode, level: number): Problem => {
   const id = Math.random().toString(36).substr(2, 9);
@@ -92,15 +93,28 @@ const App: React.FC = () => {
   const [mode, setMode] = useState<AppMode | null>(null);
   const [currentProblem, setCurrentProblem] = useState<Problem | null>(null);
 
-  // Gamification State
-  const [points, setPoints] = useState(0);
-  const [tickets, setTickets] = useState(0);
+  // Load initial state from localStorage
+  const loadSavedData = () => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      console.error("Failed to load saved data", e);
+      return null;
+    }
+  };
+
+  const savedData = loadSavedData();
+
+  // Gamification State (Persistent)
+  const [points, setPoints] = useState(savedData?.points ?? 0);
+  const [tickets, setTickets] = useState(savedData?.tickets ?? 0);
+  const [difficultyLevel, setDifficultyLevel] = useState(savedData?.difficultyLevel ?? 0);
+  const [perfectSets, setPerfectSets] = useState(savedData?.perfectSets ?? 0); // Tracks how many times we hit 10-streak
+
+  // Session State (Non-persistent or persistent per session)
   const [streak, setStreak] = useState(0);
   
-  // Difficulty State
-  const [difficultyLevel, setDifficultyLevel] = useState(0);
-  const [perfectSets, setPerfectSets] = useState(0); // Tracks how many times we hit 10-streak
-
   // UI State
   const [showLottery, setShowLottery] = useState(false);
   const [showTicketAlert, setShowTicketAlert] = useState(false);
@@ -109,12 +123,20 @@ const App: React.FC = () => {
   // Practice Mode Logic
   const [practiceCount, setPracticeCount] = useState(0);
 
+  // Persist changes to localStorage
+  useEffect(() => {
+    const dataToSave = {
+      points,
+      tickets,
+      difficultyLevel,
+      perfectSets
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+  }, [points, tickets, difficultyLevel, perfectSets]);
+
   const handleOpSelect = (op: MathOperation) => {
     setSelectedOp(op);
     setMode(null);
-    // Reset difficulty when changing operation
-    setDifficultyLevel(0);
-    setPerfectSets(0);
     setStreak(0);
   };
 
@@ -161,7 +183,6 @@ const App: React.FC = () => {
       }
     } else {
       nextStreak = 0; // Reset on mistake
-      // We do NOT reset perfectSets here, allowing user to try for the second set again
     }
     
     setStreak(nextStreak);
@@ -173,10 +194,7 @@ const App: React.FC = () => {
         // Finished 10 questions
         setMode(null);
         setCurrentProblem(null);
-        setStreak(0); // Reset streak at end of session visual, though logic preserves global streak if we wanted. 
-        // Note: Since we reset streak to 0 above if nextStreak>=10, the visual bar is empty. 
-        // If user ended with streak 5/10, this clears it. 
-        // The "perfectSets" is preserved in state for the next run.
+        setStreak(0); 
         return;
       }
       setPracticeCount(c => c + 1);
@@ -230,7 +248,7 @@ const App: React.FC = () => {
         )}
       </div>
 
-      {/* Lottery Modal */}
+      {/* Modals */}
       {showLottery && (
         <Lottery 
           tickets={tickets} 
@@ -238,7 +256,7 @@ const App: React.FC = () => {
           onClose={() => setShowLottery(false)} 
         />
       )}
-
+      
       {/* Persistent Header Stats */}
       <div className="fixed top-0 right-0 p-4 z-40 flex gap-2 md:gap-3 flex-wrap justify-end items-center pointer-events-none">
          <div className="pointer-events-auto bg-white/80 backdrop-blur border border-yellow-200 rounded-full px-3 py-2 flex items-center gap-2 shadow-sm text-yellow-600 font-bold text-sm md:text-base">
